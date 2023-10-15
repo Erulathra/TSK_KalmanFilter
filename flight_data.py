@@ -1,5 +1,10 @@
 import csv
+import math
 from operator import attrgetter
+
+import smopy
+
+import geographic_utils
 
 import numpy as np
 
@@ -14,6 +19,7 @@ class FlightPoint:
         self.speed = float(data_row[4]) * (10. / 36.)  # to m/s
         self.heading = float(data_row[9])
         self.time_step = int(data_row[11])
+        self.cart = geographic_utils.to_plane_pos(np.array([self.latitude, self.longitude]))
 
     def __str__(self):
         return (f'[latitude: {self.latitude}, '
@@ -58,6 +64,67 @@ class Flight:
 
         return points
 
+    def get_plane_points(self) -> np.ndarray:
+        gps_points = self.get_gps_points()
+
+        result = []
+        for point in gps_points:
+            result.append(geographic_utils.to_plane_pos(point))
+
+        return np.array(result)
+
+    def plane_to_map_points(self, points: np.ndarray, sm_map: smopy.Map) -> np.ndarray:
+        geo_points = []
+
+        for i, point in enumerate(points):
+            point = geographic_utils.to_geo_pos(
+                np.array([point[0], point[1], self.flight_data[i].cart[2]]))
+            geo_points.append(point)
+
+        result = np.zeros((len(points), 2))
+        for i, geo_point in enumerate(geo_points):
+            result[i][0], result[i][1] = sm_map.to_pixels(geo_point[0], geo_point[1])
+
+        return result
+
+    def predict_points(self) -> np.ndarray:
+        points = []
+        points.append(np.array([self.flight_data[0].latitude, self.flight_data[0].longitude]))
+
+        last_flight_point = self.flight_data[0]
+        for flight_point in self.flight_data[1:-1]:
+            delta_time = flight_point.time_step - last_flight_point.time_step
+            predicted_point = self.predict_position(flight_point, delta_time)
+            points.append(predicted_point)
+
+            last_flight_point = flight_point
+
+        return np.array(points)
+
+    def predict_cart(self):
+        gps = self.get_plane_points()
+        points = []
+        points.append(np.array([gps[0][0], gps[0][1]]))
+
+        flight_points = self.flight_data
+
+        last_point = np.array([gps[0][0], gps[0][1]])
+        for i, gps_point in enumerate(gps):
+            if i == 0:
+                continue
+
+            speed = flight_points[i].speed
+            heading = math.radians(flight_points[i].heading - 110)
+
+            velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
+            delta_time = flight_points[i].time_step - flight_points[i - 1].time_step
+            predicted_point = last_point + velocity * delta_time
+            points.append(np.array([predicted_point[0], predicted_point[1]]))
+
+            # last_point = predicted_point
+            last_point = np.array([gps_point[0], gps_point[1]])
+
+        return np.array(points)
 
     @staticmethod
     def _load_data(path: str) -> list[FlightPoint]:
@@ -72,3 +139,13 @@ class Flight:
                     continue
 
             return result
+
+    @staticmethod
+    def predict_position(flight_point: FlightPoint, delta_time: float):
+        return geographic_utils.predict_position(
+            flight_point.latitude,
+            flight_point.longitude,
+            flight_point.speed,
+            flight_point.heading,
+            delta_time
+        )
