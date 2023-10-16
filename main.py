@@ -17,24 +17,21 @@ def to_map_points(points: np.ndarray, map: smopy.Map):
 
 def draw_plot(flight: Flight):
     sm_map = smopy.Map(flight.map_boundaries, z=8)
+
     ax = sm_map.show_mpl()
 
     geo_gps = flight.get_gps_points()
     gps = to_map_points(geo_gps, sm_map)
     ax.plot(gps[:, 0], gps[:, 1], "r")
-    plt.show()
-
-    cart_points = flight.get_plane_points()
-    plt.plot(cart_points[:, 0], cart_points[:, 1], "g")
-    pred_points = flight.predict_cart()
-    plt.plot(pred_points[:, 0], pred_points[:, 1], "y")
-    plt.show()
 
     plane = flight.predict_cart()
     map_points = flight.plane_to_map_points(plane, sm_map)
-    ax = sm_map.show_mpl()
-    ax.plot(gps[:, 0], gps[:, 1], "r")
     ax.plot(map_points[:, 0], map_points[:, 1], "y")
+
+    kalman_points = flight.predict_kalman()
+    kalman_map = flight.plane_to_map_points(kalman_points, sm_map)
+    ax.plot(kalman_map[:, 0], kalman_map[:, 1], "g")
+
     plt.show()
 
 

@@ -1,5 +1,6 @@
 import csv
 import math
+import random
 from operator import attrgetter
 
 import smopy
@@ -7,6 +8,8 @@ import smopy
 import geographic_utils
 
 import numpy as np
+
+import kalman_filter
 
 MAP_BOUNDARIES_OFFSET = 0.01
 
@@ -115,14 +118,43 @@ class Flight:
 
             speed = flight_points[i].speed
             heading = math.radians(flight_points[i].heading - 110)
-
             velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
+
             delta_time = flight_points[i].time_step - flight_points[i - 1].time_step
             predicted_point = last_point + velocity * delta_time
             points.append(np.array([predicted_point[0], predicted_point[1]]))
 
-            # last_point = predicted_point
-            last_point = np.array([gps_point[0], gps_point[1]])
+            last_point = predicted_point
+            # last_point = np.array([gps_point[0], gps_point[1]])
+
+        return np.array(points)
+
+    def predict_kalman(self):
+        gps = self.get_plane_points()
+        points = []
+        points.append(np.array([gps[0][0], gps[0][1]]))
+
+        flight_points = self.flight_data
+        point = np.array([flight_points[0].cart[0], flight_points[0].cart[1]])
+        speed = flight_points[0].speed
+        heading = math.radians(flight_points[0].heading - 110)
+        velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
+
+        filter = kalman_filter.KalmanFilter(point, velocity, 1000, 1)
+
+        for i in range(len(flight_points)):
+            if i == 0:
+                continue
+
+            delta_time = flight_points[i].time_step - flight_points[i - 1].time_step
+            speed = flight_points[i].speed
+            heading = math.radians(flight_points[i].heading - 110)
+            velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
+
+            observation = np.array([gps[i][0], gps[i][1]])
+            state, covariance = filter.predict(delta_time, velocity)
+            filter.update(observation, delta_time)
+            points.append(np.array([state[0], state[2]]))
 
         return np.array(points)
 
