@@ -140,7 +140,7 @@ class Flight:
         heading = math.radians(flight_points[0].heading - 110)
         velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
 
-        filter = kalman_filter.KalmanFilter(point, velocity, 1000, 1)
+        filter = kalman_filter.KalmanFilter(point, velocity, 30, 1)
 
         for i in range(len(flight_points)):
             if i == 0:
