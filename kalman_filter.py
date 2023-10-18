@@ -24,7 +24,7 @@ class KalmanFilter:
         self.observation_noise = np.array([
             [1, 0],
             [0, 1]
-        ]) * observation_noise
+        ]) * (observation_noise ** 2)
 
         self.estimate_covariance = np.array([
             [1, 0, 0, 0],
