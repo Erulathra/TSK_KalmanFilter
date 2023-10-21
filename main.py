@@ -1,4 +1,5 @@
 import math
+import os
 import sys
 
 import numpy as np
@@ -16,6 +17,11 @@ class Window(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super(Window, self).__init__(parent)
+
+        self.files = list()
+        self.directory = 'data'
+        for filename in os.listdir(self.directory):
+            self.files.append(filename)
 
         self.flight = Flight('data/326f29ca_piotrkow_trybunalski_airport_to_unknown.tsv')
         self.figure = plt.figure()
@@ -55,14 +61,26 @@ class Window(QtWidgets.QDialog):
         self.button = QtWidgets.QPushButton('Draw Map')
         self.button.clicked.connect(self.plot)
 
+        # Combobox
+        self.combobox = QtWidgets.QComboBox()
+        for filename in self.files:
+            self.combobox.addItem(filename)
+
+        self.combobox.activated.connect(self.choose_flight)
+
         layout = QtWidgets.QGridLayout()
         layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
         layout.addWidget(self.slider_group)
+        layout.addWidget(self.combobox)
         layout.addWidget(self.button)
 
         self.setLayout(layout)
         self.resize(1200, 800)
+
+
+    def choose_flight(self, id):
+        self.flight = Flight(self.directory + '/' + self.files[id])
 
 
     def create_slider(self, min, max, value) -> QtWidgets.QSlider:
