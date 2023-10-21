@@ -29,7 +29,7 @@ def draw_plot(flight: Flight):
     ax.plot(map_points[:, 0], map_points[:, 1], "y")
 
     kalman_points = flight.predict_kalman()
-    kalman_map = flight.plane_to_map_points(kalman_points, sm_map)
+    kalman_map = flight.cart_to_map_points(kalman_points, sm_map)
     ax.plot(kalman_map[:, 0], kalman_map[:, 1], "g")
 
     plt.show()
