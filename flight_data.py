@@ -1,6 +1,7 @@
 import csv
 import math
 import random
+from copy import copy
 from operator import attrgetter
 
 import smopy
@@ -18,11 +19,11 @@ class FlightPoint:
     def __init__(self, data_row):
         self.latitude = float(data_row[0])
         self.longitude = float(data_row[1])
+        self.cart = geographic_utils.to_plane_pos(np.array([self.latitude, self.longitude]))
 
         self.speed = float(data_row[4]) * (10. / 36.)  # to m/s
         self.heading = float(data_row[9])
         self.time_step = int(data_row[11])
-        self.cart = geographic_utils.to_plane_pos(np.array([self.latitude, self.longitude]))
 
     def __str__(self):
         return (f'[latitude: {self.latitude}, '
@@ -90,6 +91,20 @@ class Flight:
 
         return result
 
+    def cart_to_map_points(self, points: np.ndarray, sm_map: smopy.Map) -> np.ndarray:
+        geo_points = []
+
+        for i, point in enumerate(points):
+            point = geographic_utils.to_geo_pos(
+                np.array([point[0], point[1], point[2]]))
+            geo_points.append(point)
+
+        result = np.zeros((len(points), 2))
+        for i, geo_point in enumerate(geo_points):
+            result[i][0], result[i][1] = sm_map.to_pixels(geo_point[0], geo_point[1])
+
+        return result
+
     def predict_points(self) -> np.ndarray:
         points = []
         points.append(np.array([self.flight_data[0].latitude, self.flight_data[0].longitude]))
@@ -129,32 +144,55 @@ class Flight:
 
         return np.array(points)
 
-    def predict_kalman(self):
-        gps = self.get_plane_points()
+    def predict_kalman(self, delta_time=50, observation_noise=30, prediction_noise=1):
         points = []
-        points.append(np.array([gps[0][0], gps[0][1]]))
 
         flight_points = self.flight_data
+        points.append(np.array([
+            flight_points[0].cart[0],
+            flight_points[0].cart[1],
+            flight_points[0].cart[2]]))
+
         point = np.array([flight_points[0].cart[0], flight_points[0].cart[1]])
         speed = flight_points[0].speed
         heading = math.radians(flight_points[0].heading - 110)
         velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
 
-        filter = kalman_filter.KalmanFilter(point, velocity, 30, 1)
+        filter = kalman_filter.KalmanFilter(point, velocity, observation_noise, prediction_noise)
 
-        for i in range(len(flight_points)):
-            if i == 0:
-                continue
+        time = flight_points[0].time_step
 
-            delta_time = flight_points[i].time_step - flight_points[i - 1].time_step
-            speed = flight_points[i].speed
-            heading = math.radians(flight_points[i].heading - 110)
+        while time < flight_points[-1].time_step:
+            time += delta_time
+
+            flight_point = self.get_flight_point_by_time_step(time)
+
+            observation = np.array([flight_point.cart[0], flight_point.cart[1]])
+
+            speed = flight_point.speed
+            heading = math.radians(flight_point.heading - 110)
             velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
 
-            observation = np.array([gps[i][0], gps[i][1]])
             state, covariance = filter.predict(delta_time, velocity)
             filter.update(observation, delta_time)
-            points.append(np.array([state[0], state[2]]))
+            points.append(np.array([state[0], state[2], flight_point.cart[2]]))
+
+        # for i in range(len(flight_points) - 1):
+        #     if i == 0:
+        #         continue
+        #
+        #     time += delta_time
+        #
+        #     # delta_time = flight_points[i].time_step - flight_points[i - 1].time_step
+        #
+        #     speed = flight_points[i].speed
+        #     heading = math.radians(flight_points[i].heading - 110)
+        #     velocity = np.array([speed * math.sin(heading), speed * math.cos(heading)])
+        #
+        #     observation = np.array([gps[i][0], gps[i][1]])
+        #     state, covariance = filter.predict(delta_time, velocity)
+        #     filter.update(observation, delta_time)
+        #     points.append(np.array([state[0], state[2]]))
 
         return np.array(points)
 
@@ -181,3 +219,35 @@ class Flight:
             flight_point.heading,
             delta_time
         )
+
+    def get_flight_point_by_time_step(self, time_step: int):
+        previous_point = min(self.flight_data, key=lambda x: abs(x.time_step - time_step))
+        previous_point_index = self.flight_data.index(previous_point)
+
+        assert (previous_point == self.flight_data[previous_point_index])
+
+        if previous_point_index - 1 < 0 or previous_point_index + 1 >= len(self.flight_data):
+            return previous_point
+
+        if previous_point.time_step > time_step:
+            next_point = self.flight_data[previous_point_index - 1]
+            next_point, previous_point = previous_point, next_point
+        else:
+            next_point = self.flight_data[previous_point_index + 1]
+
+        assert (next_point.time_step > previous_point.time_step)
+
+        result = copy(previous_point)
+
+        points_delta_time = next_point.time_step - previous_point.time_step
+        lerp_time = (time_step - previous_point.time_step) / points_delta_time
+
+        result.latitude = 0
+        result.longitude = 0
+        result.cart = lerp(previous_point.cart, next_point.cart, lerp_time)
+
+        return result
+
+
+def lerp(a, b, t: float):
+    return b * t + a * (1 - t)
