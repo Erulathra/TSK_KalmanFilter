@@ -7,47 +7,105 @@ import matplotlib.pyplot as plt
 
 from flight_data import Flight
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
-from matplotlib.figure import Figure
 from PyQt5 import QtCore, QtWidgets
 
 
 class Window(QtWidgets.QDialog):
+    flight: Flight
+
+
     def __init__(self, parent=None):
         super(Window, self).__init__(parent)
 
+        self.flight = Flight('data/326f29ca_piotrkow_trybunalski_airport_to_unknown.tsv')
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        self.button = QtWidgets.QPushButton('Plot')
+
+        self.slider_group = QtWidgets.QGroupBox()
+
+        # Delta time widget
+        delta_time_widget = QtWidgets.QWidget()
+        self.delta_time_slider = self.create_slider(30, 100, 50)
+        delta_time_hbox = self.create_slider_hbox(self.delta_time_slider, 0.1)
+        delta_time_widget.setLayout(delta_time_hbox)
+
+        # Prediction noise widget
+        prediction_noise_widget = QtWidgets.QWidget()
+        self.prediction_noise_slider = self.create_slider(1, 100, 1)
+        prediction_noise_hbox = self.create_slider_hbox(self.prediction_noise_slider, 0.1)
+        prediction_noise_widget.setLayout(prediction_noise_hbox)
+
+        # Observation noise widget
+        observation_noise_widget = QtWidgets.QWidget()
+        self.observation_noise_slider = self.create_slider(1, 500, 30)
+        observation_noise_hbox = self.create_slider_hbox(self.observation_noise_slider, 0.1)
+        observation_noise_widget.setLayout(observation_noise_hbox)
+
+        vbox = QtWidgets.QVBoxLayout()
+        vbox.addWidget(QtWidgets.QLabel('Time step slider'))
+        vbox.addWidget(delta_time_widget)
+        vbox.addWidget(QtWidgets.QLabel('Prediction noise slider'))
+        vbox.addWidget(prediction_noise_widget)
+        vbox.addWidget(QtWidgets.QLabel('Observation noise slider'))
+        vbox.addWidget(observation_noise_widget)
+        vbox.addStretch(1)
+        self.slider_group.setLayout(vbox)
+
+        self.button = QtWidgets.QPushButton('Draw Map')
         self.button.clicked.connect(self.plot)
+
         layout = QtWidgets.QGridLayout()
         layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
+        layout.addWidget(self.slider_group)
         layout.addWidget(self.button)
+
         self.setLayout(layout)
         self.resize(1200, 800)
 
 
-    def plot(self, flight: Flight):
-        self.figure.clear()
-        
-        flight = Flight('data/326f29ca_piotrkow_trybunalski_airport_to_unknown.tsv')
+    def create_slider(self, min, max, value) -> QtWidgets.QSlider:
+        slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        slider.setFocusPolicy(QtCore.Qt.StrongFocus)
+        slider.setTickPosition(QtWidgets.QSlider.NoTicks)
+        slider.setRange(min, max)
+        slider.setValue(value)
+        slider.setSingleStep(1)
 
-        sm_map = smopy.Map(flight.map_boundaries, z=8)
+        return slider
+    
+
+    def create_slider_hbox(self, slider: QtWidgets.QSlider, step=1) -> QtWidgets.QHBoxLayout:
+
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.addWidget(slider)
+        label = QtWidgets.QLabel(str(float(slider.value()) / (1 / step)))
+        hbox.addWidget(label)
+
+        slider.valueChanged.connect(lambda value: label.setNum(float(value) / (1 / step)))
+        return hbox
+
+
+    def plot(self):
+        
+        self.figure.clear()
+
+        sm_map = smopy.Map(self.flight.map_boundaries, z=8)
 
         ax = self.figure.add_subplot(111)
         ax = sm_map.show_mpl(ax=ax, figsize=(8,6))
 
-        geo_gps = flight.get_gps_points()
+        geo_gps = self.flight.get_gps_points()
         gps = to_map_points(geo_gps, sm_map)
         ax.plot(gps[:, 0], gps[:, 1], "r")
 
-        plane = flight.predict_cart()
-        map_points = flight.plane_to_map_points(plane, sm_map)
+        plane = self.flight.predict_cart()
+        map_points = self.flight.plane_to_map_points(plane, sm_map)
         ax.plot(map_points[:, 0], map_points[:, 1], "y")
 
-        kalman_points = flight.predict_kalman()
-        kalman_map = flight.plane_to_map_points(kalman_points, sm_map)
+        kalman_points = self.flight.predict_kalman(self.delta_time_slider.value(), self.observation_noise_slider.value(), self.prediction_noise_slider.value())
+        kalman_map = self.flight.cart_to_map_points(kalman_points, sm_map)
         ax.plot(kalman_map[:, 0], kalman_map[:, 1], "g")
 
         self.canvas.draw()
@@ -61,32 +119,8 @@ def to_map_points(points: np.ndarray, map: smopy.Map):
     return result
 
 
-def draw_plot(flight: Flight):
-    sm_map = smopy.Map(flight.map_boundaries, z=8)
-
-    ax = sm_map.show_mpl()
-
-    geo_gps = flight.get_gps_points()
-    gps = to_map_points(geo_gps, sm_map)
-    ax.plot(gps[:, 0], gps[:, 1], "r")
-
-    plane = flight.predict_cart()
-    map_points = flight.plane_to_map_points(plane, sm_map)
-    ax.plot(map_points[:, 0], map_points[:, 1], "y")
-
-    kalman_points = flight.predict_kalman()
-    kalman_map = flight.cart_to_map_points(kalman_points, sm_map)
-    ax.plot(kalman_map[:, 0], kalman_map[:, 1], "g")
-
-    plt.show()
-
-
 def main():
     app = QtWidgets.QApplication(sys.argv)
-
-    # flight = Flight('data/326f29ca_piotrkow_trybunalski_airport_to_unknown.tsv')
-    # draw_plot(flight)
-
     main = Window()
     main.show()
     sys.exit(app.exec_())
