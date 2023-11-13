@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import smopy
 import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import QMessageBox
 
 from flight_data import Flight
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
