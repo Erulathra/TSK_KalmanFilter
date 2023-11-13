@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import smopy
 import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import QMessageBox
 
 from flight_data import Flight
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -61,6 +62,9 @@ class Window(QtWidgets.QDialog):
         self.button = QtWidgets.QPushButton('Draw Map')
         self.button.clicked.connect(self.plot)
 
+        self.help_button = QtWidgets.QPushButton('Help')
+        self.help_button.clicked.connect(self.show_help)
+
         # Combobox
         self.combobox = QtWidgets.QComboBox()
         for filename in self.files:
@@ -74,6 +78,7 @@ class Window(QtWidgets.QDialog):
         layout.addWidget(self.slider_group)
         layout.addWidget(self.combobox)
         layout.addWidget(self.button)
+        layout.addWidget(self.help_button)
 
         self.setLayout(layout)
         self.resize(1200, 800)
@@ -127,6 +132,15 @@ class Window(QtWidgets.QDialog):
         ax.plot(kalman_map[:, 0], kalman_map[:, 1], "g")
 
         self.canvas.draw()
+
+    def show_help(self):
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Question)
+        msg_box.setText(
+            'Red - Original data\n'
+            'Yellow - Predicted\n'
+            'Green - Filtered using Kalman Filter\n')
+        msg_box.exec_()
 
 
 def to_map_points(points: np.ndarray, map: smopy.Map):
