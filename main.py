@@ -59,6 +59,8 @@ class Window(QtWidgets.QDialog):
         vbox.addStretch(1)
         self.slider_group.setLayout(vbox)
 
+        self.help_button = QtWidgets.QPushButton('Help')
+        self.help_button.clicked.connect(self.show_help)
         self.button = QtWidgets.QPushButton('Draw Map')
         self.button.clicked.connect(self.plot)
 
@@ -75,6 +77,7 @@ class Window(QtWidgets.QDialog):
         layout.addWidget(self.slider_group)
         layout.addWidget(self.combobox)
         layout.addWidget(self.button)
+        layout.addWidget(self.help_button)
 
         self.setLayout(layout)
         self.resize(1200, 800)
